@@ -11,6 +11,7 @@ __pycache__/
 # Local environments and environment files
 .env
 .env.*
+pypi_token.txt
 .venv/
 .venv-cuda/
 venv/
