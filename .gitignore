@@ -1,0 +1,52 @@
+# Python bytecode and tool caches
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.hypothesis/
+
+# Local environments and environment files
+.env
+.env.*
+.venv/
+venv/
+env/
+
+# Packaging and build output
+.eggs/
+*.egg-info/
+dist/
+build/
+wheelhouse/
+
+# Test, lint, and coverage output
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Generated experiments and reports
+runs/
+reports/
+
+# Local datasets and model checkpoints
+data/
+datasets/
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
