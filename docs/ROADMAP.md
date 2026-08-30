@@ -1,6 +1,6 @@
 # ExpoNet implementation roadmap
 
-Updated: 2026-08-30. Current stage: **P1, package and CPU activation validated; activation-overhead measurement and CUDA validation pending**.
+Updated: 2026-08-30. Current stage: **P1 and P2 CPU scope complete; CUDA validation deferred for unavailable hardware**.
 
 This is the single progress tracker. [DECISIONS.md](DECISIONS.md) owns accepted choices, [DESIGN.md](DESIGN.md) owns mathematical behavior, [API_CONTRACT.md](API_CONTRACT.md) owns interfaces, and [VALIDATION.md](VALIDATION.md) owns evaluation expectations.
 
@@ -38,7 +38,7 @@ Dependencies: P0 complete.
 - [x] **P1.01 — Establish a small installable package.** Add `pyproject.toml`, `src/exponet/`, a confirmed license, `.gitignore`, and minimal test/lint configuration. Ignore environments, caches, checkpoints, datasets, and generated runs. Acceptance: editable install and a wheel import work without PSANN installed; record actual Python/Torch/NumPy/sklearn versions. Start with one validated Python version (proposed 3.11), then widen only with tests. Completed with the MIT License and an inspected wheel installed and exercised outside the source tree; see the 2026-08-30 execution entry.
 - [x] **P1.02 — Implement ExpoActivation.** Follow the exact equation, safe evaluation, sharing, initialization, fixed mode, and broadcasting contracts. Acceptance: analytic forward/gradient tests, zero/negative behavior, invalid configuration tests, parameter/buffer registration, and a state_dict round trip pass on CPU.
 - [x] **P1.03 — Prove coefficient learning in isolation (CPU scope).** A deterministic CPU test starts at `a=0.5`, optimizes only `theta`, and recovers the known target `a=0.7` within a declared tolerance; float64 gradcheck varies both the input and raw coefficient away from the origin. A deterministic CUDA forward/backward/update test is prepared, but CUDA execution is deferred because this machine has no GPU; no CUDA pass is claimed.
-- [ ] **P1.04 — Measure activation overhead before expanding the library.** Acceptance: use the timing protocol in VALIDATION.md on CPU and available CUDA hardware; separate constraint mapping, activation forward/backward, and a minimal dense block. Include native ReLU, native squared ReLU, sine, and the learned blend. Record shapes, dtype, environment, warmup, timings, and limitations. Review actual overhead before proceeding to a larger implementation; no speed threshold has yet been agreed. Sine is a timing reference only.
+- [x] **P1.04 — Measure activation overhead before expanding the library (CPU scope).** Used the timing protocol in VALIDATION.md to separate coefficient mapping, isolated activation inference/forward-backward, and minimal dense blocks with and without LayerNorm. Native ReLU, native squared ReLU, sine, and the real learned blend were measured across the required CPU shapes in float32 with recorded warmup, median, IQR, environment, and limitations. [The reviewed report](ACTIVATION_BENCHMARK.md) records significant isolated eager-CPU overhead that narrows inside dense blocks; no speed threshold or advantage is claimed. CUDA timing remains deferred because no CUDA device is available.
 
 Exit: the activation is correct independently of estimator preprocessing or architecture effects. No accuracy advantage is claimed.
 
@@ -46,8 +46,8 @@ Exit: the activation is correct independently of estimator preprocessing or arch
 
 Dependencies: P1.
 
-- [ ] **P2.01 — Compose ExpoMLP.** Build explicit Linear -> optional LayerNorm -> activation blocks and a linear readout. Acceptance: hidden-width/output shapes, independent per-layer parameters, initialization, normalization-off behavior, width-one rejection with LayerNorm, and signed regression outputs are tested.
-- [ ] **P2.02 — Verify direct PyTorch use.** Add one short module example with a caller-owned optimizer. Acceptance: an optimizer step updates both ordinary weights and raw blend parameters; `.to()` moves every parameter/buffer; state_dict reload preserves outputs and coefficients; singleton and batched inference agree within tolerance.
+- [x] **P2.01 — Compose ExpoMLP.** Built explicit Linear -> optional LayerNorm -> activation blocks and a linear readout. CPU tests cover hidden-width/output shapes, independent per-layer parameters, Xavier/zero-bias initialization, normalization-off behavior, width-one rejection with LayerNorm, and signed regression outputs.
+- [x] **P2.02 — Verify direct PyTorch use.** Added `examples/direct_torch.py` with a caller-owned optimizer. CPU tests verify ordinary-weight/raw-blend updates, `.to()` parameter/buffer dtype and device behavior, strict state_dict reload of outputs and coefficients, and singleton/batched inference agreement.
 
 Exit: one model backbone is usable through ordinary PyTorch without estimator state.
 
@@ -175,3 +175,63 @@ The first smoke invocation added Python's `-I` flag, which hid the Windows user-
 Result: `exponet_file=C:\Users\milin\AppData\Local\Temp\exponet-wheel-validation-5d4ca65dca5a4348b0f1aa25f2853bc3\venv\Lib\site-packages\exponet\__init__.py`, `outside_repo=True`, `inside_temp_venv=True`, deterministic output `[[0.375, 3.0]]`, theta gradient `[-0.0625, 0.5]`, `finite=True`, `psann_loaded=False`, and `psann_dependency=False`.
 
 Remaining P1 limitations: P1.04 activation-overhead measurement is pending, and CUDA execution remains deferred for unavailable hardware. MLP, estimators, training, persistence, benchmarks, and later phases remain unimplemented.
+
+### 2026-08-30 — P1.04 CPU activation-overhead measurement
+
+Changed paths: `benchmarks/__init__.py`, `benchmarks/benchmark_activation.py`, `docs/ACTIVATION_BENCHMARK.md`, `README.md`, and `docs/ROADMAP.md`.
+
+The benchmark used the current checkout (`C:\Users\milin\Documents\ExpoNet\src\exponet\__init__.py`) and the real `ExpoActivation`. It measured standalone sigmoid coefficient mapping, isolated activation inference and forward/backward, and minimal dense blocks with Identity or LayerNorm across batch sizes 1 and 128 and widths 64 and 256. References were native ReLU, native squared ReLU, and plain sine. Setup, input construction, and transfers were outside timed regions; gradients were cleared consistently inside forward/backward timing.
+
+Environment: Windows 10 build 26200; Intel64 Family 6 Model 186 Stepping 3; Python 3.11.9; PyTorch 2.7.1+cu118; NumPy 2.4.6; scikit-learn 1.4.2; CPU float32; one intra-operation thread; seed 20260830. Each of 100 final cases used 20 explicit warmup iterations and `torch.utils.benchmark.Timer.blocked_autorange` with a 0.5-second minimum. Every table entry in `docs/ACTIVATION_BENCHMARK.md` records median and IQR microseconds; no final result had IQR greater than 25% of its median.
+
+Exact timing command:
+
+```powershell
+python -B -m benchmarks.benchmark_activation --device cpu --num-threads 1 --warmup 20 --min-run-time 0.5 --output "$env:TEMP\exponet-activation-benchmark-cpu-20260830-final.json"
+```
+
+Result: `wrote=C:\Users\milin\AppData\Local\Temp\exponet-activation-benchmark-cpu-20260830-final.json` and `measurements=100`.
+
+Review outcome: learned-blend isolated inference was 3.15-3.76 times the matched ReLU median and isolated forward/backward was 2.61-3.12 times. In dense blocks, ratios narrowed to 1.25-2.18 times for inference and 1.31-1.76 times for forward/backward without normalization, and 1.19-1.94 times and 1.17-1.60 times respectively with LayerNorm. Standalone sigmoid mapping represented 15.3-30.2% of the complete learned-activation median. The measurement shows eager-CPU overhead rather than a speed advantage; no threshold was predeclared, so the result is a baseline and limitation, not a performance pass claim.
+
+CUDA availability and guarded command:
+
+```powershell
+python -B -m benchmarks.benchmark_activation --device cuda --num-threads 1 --warmup 1 --min-run-time 0.001 --output "$env:TEMP\exponet-activation-benchmark-cuda-should-not-exist.json"
+```
+
+Result: exit 2 with `CUDA was requested, but torch.cuda.is_available() is False`; no output file was created and no CUDA operation ran. This validates explicit rejection only and is not CUDA timing evidence.
+
+Final checks:
+
+```powershell
+python -B -m pytest -q -p no:cacheprovider -k "not cuda"
+python -B -m ruff check --no-cache --no-respect-gitignore src tests benchmarks
+python -B -m ruff format --check --no-cache --no-respect-gitignore src tests benchmarks
+```
+
+Results: `62 passed, 1 deselected in 2.69s`; `All checks passed!`; `5 files already formatted`.
+
+Remaining limitations: CUDA timing and validation require actual GPU hardware. These measurements cover one Windows CPU, eager float32, one thread, one PyTorch build, and small dense shapes; they are not end-to-end training evidence. P2-P7 remain unimplemented. No commit or push was performed for this task.
+
+### 2026-08-30 — P2.01/P2.02 ExpoMLP and direct-PyTorch validation
+
+Changed paths: `src/exponet/nn.py`, `src/exponet/__init__.py`, `tests/test_nn.py`, `examples/direct_torch.py`, `README.md`, and `docs/ROADMAP.md`.
+
+Implemented `ExpoMLP` as direct PyTorch composition only: each hidden block is `Linear -> LayerNorm or Identity -> ExpoActivation`, with a final linear-only readout. Constructor and forward validation require positive non-boolean integer input/output widths, a nonempty tuple of positive non-boolean hidden widths, supported normalization, rank-two inputs, and matching input features. The direct example owns its `AdamW` optimizer and performs one update. No estimator, shared training, persistence, or additional benchmark functionality was added.
+
+Exact CPU verification commands:
+
+```powershell
+python -B -m pytest -q -p no:cacheprovider -k "not cuda"
+python -B -m ruff check --no-cache --no-respect-gitignore src tests benchmarks examples
+python -B -m ruff format --check --no-cache --no-respect-gitignore src tests benchmarks examples
+python -c "from exponet import ExpoMLP; print(ExpoMLP)"
+python -B examples/direct_torch.py
+git diff --check
+git status --short
+```
+
+Results: `110 passed, 1 deselected in 3.71s`; `All checks passed!`; `8 files already formatted`; import printed `<class 'exponet.nn.ExpoMLP'>`; and the example printed `prediction_shape=(1, 1)`. `git diff --check` exited 0 with only existing line-ending warnings for `README.md`, `docs/ROADMAP.md`, and `src/exponet/__init__.py`. Status showed the intentional P1.04 changes in `README.md`, `docs/ROADMAP.md`, `benchmarks/`, and `docs/ACTIVATION_BENCHMARK.md`, together with the P2 paths listed above.
+
+CUDA limitation: CUDA tests were deliberately deselected by the CPU command; no CUDA operation or validation is claimed because `torch.cuda.is_available()` is false on this machine. Current evidence covers CPU direct-module behavior only. P3.01 is the next roadmap task. No staging, commit, or push was performed.
