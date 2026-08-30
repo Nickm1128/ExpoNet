@@ -1,6 +1,9 @@
 # Correctness and experiment plan
 
-Status: planned checks, not executed library validation. The [roadmap](ROADMAP.md) records completion evidence.
+Status: activation, direct-MLP, P3 regression, P4 classification, P5 persistence,
+the initial P6 evaluation, and P7 built-distribution validation have recorded
+completion evidence. The [roadmap](ROADMAP.md) records the evidence and
+remaining scope.
 
 ## 1. Activation tests
 

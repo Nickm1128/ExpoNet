@@ -1,6 +1,6 @@
 # P1.04 activation-overhead measurement
 
-Measured: 2026-08-30. Scope: Windows CPU float32 only. CUDA was unavailable and was not tested.
+Measured: 2026-08-30. Scope: Windows CPU float32 only. CUDA was unavailable in the recorded Python/PyTorch environment and was not tested.
 
 This is an early timing review, not an end-to-end model benchmark. It compares native ReLU, native squared ReLU, plain sine, and the real trainable `ExpoActivation`. Sine is a timing reference only and is not a supported ExpoNet activation. No performance threshold was agreed before measurement, so these results do not establish a speed pass, speed advantage, or release claim.
 
@@ -88,4 +88,4 @@ The accepted blend has clear eager-CPU overhead in isolation, especially for sma
 
 No performance budget has been selected, so this measurement does not create a numerical pass/fail threshold. It does provide an evidence-based baseline for P2: proceed without claiming speed, retain native ReLU as the realistic runtime baseline, and measure complete training workloads before changing defaults or adding optimization complexity.
 
-This run covers one Windows CPU, float32, eager execution, one PyTorch version, one thread, and small dense shapes. It does not cover end-to-end training, multiple thread counts, compilation, other operating systems, other CPUs, reduced precision, or GPU execution. A CUDA invocation was prepared, but this machine reported no available CUDA device; no skipped or rejected command counts as CUDA timing evidence.
+This run covers one Windows CPU, float32, eager execution, one PyTorch version, one thread, and small dense shapes. It does not cover end-to-end training, multiple thread counts, compilation, other operating systems, other CPUs, reduced precision, or GPU execution. A CUDA invocation was prepared, but the recorded Python/PyTorch environment reported no available CUDA device; no skipped or rejected command counts as CUDA timing evidence.

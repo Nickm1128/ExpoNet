@@ -1,6 +1,9 @@
-# Proposed API and behavior contract
+# API and behavior contract
 
-Status: design only. The blend equation is accepted; names and defaults below await [decision review](DECISIONS.md). Examples are target interfaces, not runnable current functionality. All learned activation parameters represent blend coefficients in `[0, 1]`, not exponents. No aliases for the superseded power proposal will be added.
+Status: P1-P6 implement the public interfaces and behavior recorded below. This
+document is the release-candidate contract, not a list of planned interfaces.
+All learned activation parameters represent blend coefficients in `[0, 1]`, not
+exponents. No aliases for the superseded power proposal are provided.
 
 ## Public surface
 
@@ -31,15 +34,15 @@ ExpoMLP(
 
 ### Estimator configuration
 
-Common constructor parameters are explicit keyword arguments with the following proposed defaults:
+Common constructor parameters are explicit keyword arguments with the following accepted defaults:
 
 | Parameter | Default | Contract |
 | --- | --- | --- |
 | `hidden_dims` | `(64, 64)` | Same architecture contract as ExpoMLP. |
-| `blend_mode` | `"per_neuron"` | `"per_neuron"` or proposed experimental `"per_layer"`. |
+| `blend_mode` | `"per_neuron"` | `"per_neuron"` or experimental-control `"per_layer"`. |
 | `blend_init` | `0.5` | Scalar coefficient; `0 < blend_init < 1` when trainable, `[0, 1]` when fixed. |
 | `trainable_blend` | `True` | False permits fixed endpoints. |
-| `normalization` | `"layer"` | `"layer"` or `"none"`; provisional default. |
+| `normalization` | `"layer"` | `"layer"` or `"none"`; P6 did not support a default change. |
 | `standardize` | `True` | Training-only feature StandardScaler. |
 | `lr` | `1e-3` | Positive finite main learning rate. |
 | `blend_lr` | `None` | None means main learning rate; otherwise positive finite. |

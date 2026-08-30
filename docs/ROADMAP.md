@@ -1,10 +1,10 @@
 # ExpoNet implementation roadmap
 
-Updated: 2026-08-30. Current stage: **P1 and P2 CPU scope complete; CUDA validation deferred for unavailable hardware**.
+Updated: 2026-08-30. Current stage: **P7 first release readiness complete; publication is intentionally out of scope**.
 
 This is the single progress tracker. [DECISIONS.md](DECISIONS.md) owns accepted choices, [DESIGN.md](DESIGN.md) owns mathematical behavior, [API_CONTRACT.md](API_CONTRACT.md) owns interfaces, and [VALIDATION.md](VALIDATION.md) owns evaluation expectations.
 
-ExpoActivation is the only implemented runtime component. Unchecked tasks are incomplete. The per-neuron ReLU/squared-ReLU blend is accepted and supersedes the original power proposal. Other proposed defaults must not be treated as approved simply because they appear in this roadmap.
+ExpoActivation and the direct-PyTorch ExpoMLP are the implemented runtime components. Unchecked tasks are incomplete. The per-neuron ReLU/squared-ReLU blend is accepted and supersedes the original power proposal. Other proposed defaults must not be treated as approved simply because they appear in this roadmap.
 
 ## Working method
 
@@ -26,8 +26,8 @@ Run its acceptance checks and update the execution log with actual outcomes.
 Dependencies: none. No implementation is authorized by completing the documentation draft alone.
 
 - [x] **P0.01 — Review PSANN and draft a focused plan.** Acceptance: source review, mathematical design, API proposal, validation plan, and phased tasks are linked from the root README.
-- [ ] **P0.02 — Confirm D01-D09.** Acceptance: record decisions, including coefficient mapping, computational-cost priorities, first workloads, dependencies, license, and initial CUDA scope. The per-neuron linear/quadratic blend and no exact-endpoint requirement are confirmed; remaining choices stay open.
-- [ ] **P0.03 — Reconcile the contracts.** Acceptance: all documents agree with the confirmed decisions; decide which initial defaults are provisional pending experiments. Obtain the go-ahead to begin implementation.
+- [x] **P0.02 — Confirm D01-D09.** Acceptance: record decisions, including coefficient mapping, computational-cost priorities, first workloads, dependencies, license, and initial CUDA scope. The 2026-08-30 decision entry accepts D02-D07 alongside the previously resolved choices.
+- [x] **P0.03 — Reconcile the contracts.** Acceptance: all documents agree with the confirmed decisions; decide which initial defaults are provisional pending experiments. The accepted defaults are reflected in the contracts before P3 implementation.
 
 Exit: no unresolved decision blocks activation semantics or the first package/API shape.
 
@@ -37,8 +37,8 @@ Dependencies: P0 complete.
 
 - [x] **P1.01 — Establish a small installable package.** Add `pyproject.toml`, `src/exponet/`, a confirmed license, `.gitignore`, and minimal test/lint configuration. Ignore environments, caches, checkpoints, datasets, and generated runs. Acceptance: editable install and a wheel import work without PSANN installed; record actual Python/Torch/NumPy/sklearn versions. Start with one validated Python version (proposed 3.11), then widen only with tests. Completed with the MIT License and an inspected wheel installed and exercised outside the source tree; see the 2026-08-30 execution entry.
 - [x] **P1.02 — Implement ExpoActivation.** Follow the exact equation, safe evaluation, sharing, initialization, fixed mode, and broadcasting contracts. Acceptance: analytic forward/gradient tests, zero/negative behavior, invalid configuration tests, parameter/buffer registration, and a state_dict round trip pass on CPU.
-- [x] **P1.03 — Prove coefficient learning in isolation (CPU scope).** A deterministic CPU test starts at `a=0.5`, optimizes only `theta`, and recovers the known target `a=0.7` within a declared tolerance; float64 gradcheck varies both the input and raw coefficient away from the origin. A deterministic CUDA forward/backward/update test is prepared, but CUDA execution is deferred because this machine has no GPU; no CUDA pass is claimed.
-- [x] **P1.04 — Measure activation overhead before expanding the library (CPU scope).** Used the timing protocol in VALIDATION.md to separate coefficient mapping, isolated activation inference/forward-backward, and minimal dense blocks with and without LayerNorm. Native ReLU, native squared ReLU, sine, and the real learned blend were measured across the required CPU shapes in float32 with recorded warmup, median, IQR, environment, and limitations. [The reviewed report](ACTIVATION_BENCHMARK.md) records significant isolated eager-CPU overhead that narrows inside dense blocks; no speed threshold or advantage is claimed. CUDA timing remains deferred because no CUDA device is available.
+- [x] **P1.03 — Prove coefficient learning in isolation (CPU scope).** A deterministic CPU test starts at `a=0.5`, optimizes only `theta`, and recovers the known target `a=0.7` within a declared tolerance; float64 gradcheck varies both the input and raw coefficient away from the origin. The deterministic CUDA forward/backward/update test now passes; see the 2026-08-30 CUDA execution entry.
+- [x] **P1.04 — Measure activation overhead before expanding the library (CPU scope).** Used the timing protocol in VALIDATION.md to separate coefficient mapping, isolated activation inference/forward-backward, and minimal dense blocks with and without LayerNorm. Native ReLU, native squared ReLU, sine, and the real learned blend were measured across the required CPU shapes in float32 with recorded warmup, median, IQR, environment, and limitations. [The reviewed report](ACTIVATION_BENCHMARK.md) records significant isolated eager-CPU overhead that narrows inside dense blocks; no speed threshold or advantage is claimed. The CUDA benchmark smoke invocation succeeds, but a reviewed CUDA timing report still requires the full timing protocol.
 
 Exit: the activation is correct independently of estimator preprocessing or architecture effects. No accuracy advantage is claimed.
 
@@ -55,10 +55,10 @@ Exit: one model backbone is usable through ordinary PyTorch without estimator st
 
 Dependencies: P2.
 
-- [ ] **P3.01 — Implement input preparation and device resolution.** Acceptance: valid dense inputs convert to float32; malformed/nonfinite/complex/sparse inputs fail; explicit CUDA never silently falls back; regression rank metadata survives conversion; splitting precedes scaler fitting and validation cannot affect fitted scaler statistics.
-- [ ] **P3.02 — Implement the shared training loop.** AdamW, blend parameter group, sample-weighted epoch loss, optional clipping, validation, history, and best-state restoration. Acceptance: final short batch is included; fixed coefficients stay fixed; every trainable parameter appears in exactly one optimizer group; finite-state failures raise; early-stopping boundary cases pass.
-- [ ] **P3.03 — Implement ExpoRegressor.** Acceptance: fit/predict/score, one- and multiple-output shapes, target inverse scaling, get_blend_weights, fit reset, fitted-state invalidation, clone, and a small Pipeline/GridSearchCV smoke test pass. A small synthetic regression problem overfits with a fixed seed without requiring an improvement over ReLU.
-- [ ] **P3.04 — Validate estimator device behavior.** Acceptance: real CUDA regression fit/predict produces finite results and learns blend coefficients; identical saved model state gives CPU/CUDA inference parity within recorded tolerances; batching and CPU staging avoid requiring the entire dataset on the GPU.
+- [x] **P3.01 — Implement input preparation and device resolution.** Valid dense features and regression targets convert to finite float32 arrays; malformed/nonfinite/complex/sparse inputs fail; explicit CUDA never silently falls back; rank metadata survives conversion; splitting precedes scaler fitting and validation cannot affect fitted scaler statistics.
+- [x] **P3.02 — Implement the shared training loop.** AdamW uses separate non-overlapping linear-weight, blend, and no-decay groups; it provides sample-weighted mini-batch loss, optional clipping, validation, history, finite-state failures, and best-state restoration.
+- [x] **P3.03 — Implement ExpoRegressor.** `fit`, `predict`, `score`, target scaling, blend inspection, lifecycle invalidation, cloning, Pipeline, and GridSearchCV smoke coverage are implemented and tested for one- and multi-output regression.
+- [x] **P3.04 — Validate estimator device behavior.** CUDA regression fit/predict is finite and updates blend coefficients; identical state gives CPU/CUDA inference parity within recorded tolerances. Source arrays stay on CPU and only bounded mini-batches move to the selected device.
 
 Exit: a usable regression workflow, including actual CUDA evidence. If hardware is unavailable, mark P3.04 blocked and continue independent CPU tasks without marking the phase complete.
 
@@ -66,9 +66,9 @@ Exit: a usable regression workflow, including actual CUDA evidence. If hardware 
 
 Dependencies: P3.01-P3.03; CUDA checks can follow P3.04 availability.
 
-- [ ] **P4.01 — Implement ExpoClassifier with the same trainer.** Acceptance: integer and string label encoding, binary/multiclass K-logit loss, probability column ordering, label reconstruction, and accuracy scoring pass; unseen validation labels and invalid target kinds fail clearly.
-- [ ] **P4.02 — Test estimator lifecycle and compatibility.** Acceptance: repeated fits with changed classes reset state; stratified holdout errors are actionable; regression/classification cloning, parameter changes, Pipeline, cross-validation, and relevant official estimator checks are exercised. Record any unsupported checks with a narrow contract explanation; do not claim full compliance from smoke tests alone.
-- [ ] **P4.03 — Add small usage examples.** Acceptance: regression, multiclass classification, fixed-blend controls, and explicit CPU/CUDA selection examples run from the installed package. No network dataset download is needed for default examples. CUDA classification gets a real training/inference smoke test.
+- [x] **P4.01 — Implement ExpoClassifier with the same trainer.** Integer and string label encoding, binary/multiclass K-logit loss, ordered probability columns, label reconstruction, and accuracy scoring pass; unseen validation labels and invalid target kinds fail clearly.
+- [x] **P4.02 — Test estimator lifecycle and compatibility.** Repeated fits with changed classes reset state; stratified holdout errors are actionable; regression/classification cloning, parameter changes, Pipeline, and cross-validation smoke coverage pass. The official `check_estimator` suite was exercised: it reaches the intentionally unsupported continuous-label case because ExpoClassifier accepts only integer/string labels; no full-estimator-check compliance is claimed.
+- [x] **P4.03 — Add small usage examples.** Runnable regression and multiclass-classification examples include fixed-blend control and explicit CPU/CUDA selection. CUDA classification gets a real training/inference smoke test.
 
 Exit: two task wrappers share one trainer and preserve documented output semantics.
 
@@ -76,8 +76,8 @@ Exit: two task wrappers share one trainer and preserve documented output semanti
 
 Dependencies: P4.
 
-- [ ] **P5.01 — Define and implement versioned snapshots.** Acceptance: primitive metadata and tensors reconstruct only built-in model types; all fitted preprocessing and label/rank metadata are included; writes are atomic; loading is explicitly restricted with no arbitrary pickle fallback.
-- [ ] **P5.02 — Verify portability and failure cases.** Acceptance: trained/fixed blend coefficients, all normalization modes, regression target ranks/scalers, and classifier string labels survive save/load. Test CUDA-to-CPU loading, incompatible kind/version, damaged state, wrong shapes, and failed-write preservation. Loaded inference matches the source model; a subsequent fit starts fresh.
+- [x] **P5.01 — Define and implement versioned snapshots.** Tensor-and-primitive metadata reconstructs only built-in ExpoNet models; fitted preprocessing and label/rank metadata are included; writes use a temporary sibling plus atomic replacement; loading uses `weights_only=True` with no pickle fallback.
+- [x] **P5.02 — Verify portability and failure cases.** Trained/fixed blend coefficients, both normalization modes, regression target ranks/scalers, and classifier string labels survive save/load. CUDA-to-CPU loading, incompatible kind/version, damaged state, wrong shapes, failed-write preservation, fresh subsequent fit, and source/loaded inference parity are covered.
 
 Exit: users can retain fitted models without introducing a general artifact/deployment platform.
 
@@ -85,9 +85,9 @@ Exit: users can retain fitted models without introducing a general artifact/depl
 
 Dependencies: P4 for experiments; P5 before publishing reusable fitted snapshots.
 
-- [ ] **P6.01 — Build one reproducible benchmark runner.** Acceptance: implement the experiment matrix in VALIDATION.md; record split/seed/configuration/environment, native ReLU baseline, fixed blends, learned coefficients, actual parameter counts, metrics, elapsed time, and failures. Generated outputs go to ignored `runs/` or `reports/`.
-- [ ] **P6.02 — Execute the initial matrix.** Acceptance: paired runs use the same data partitions and budgets, at least five seeds for reported comparisons, and both normalized/unnormalized blocks. Include at least one real regression and one real classification dataset with recorded provenance, alongside synthetic controls. Failures remain visible in aggregate summaries.
-- [ ] **P6.03 — Review findings and choose defaults.** Acceptance: summarize per-dataset accuracy, stability, runtime, coefficient behavior, and seed variability. Compare learned blends against fixed `blend_init` as well as ReLU. Record whether evidence supports changing normalization or initialization defaults. No selected best seed or universal superiority claim.
+- [x] **P6.01 — Build one reproducible benchmark runner.** `benchmarks/initial_evaluation.py` implements the activation matrix and records paired splits/seeds, configuration, environment, native baselines, fixed/learned blends, parameter counts, metrics, elapsed time, coefficients, and failures in ignored JSON reports.
+- [x] **P6.02 — Execute the initial matrix.** The 280-run five-seed matrix completed with both normalization modes on synthetic regression/multiclass controls and bundled real Diabetes/Iris datasets. Provenance, checksums, and attempted/completed counts are recorded in [the reviewed report](INITIAL_EVALUATION.md).
+- [x] **P6.03 — Review findings and choose defaults.** The report summarizes held-out metrics, paired differences, stability, runtime, and coefficient behavior. Results do not support changing the initial blend or normalization defaults; no superiority claim is made.
 
 Exit: a compact tracked report distinguishes mathematical correctness from empirical usefulness. A negative result is an acceptable outcome.
 
@@ -95,9 +95,9 @@ Exit: a compact tracked report distinguishes mathematical correctness from empir
 
 Dependencies: P1-P6 complete; no actual publication is implied by readiness.
 
-- [ ] **P7.01 — Finalize documentation.** Acceptance: replace planned snippets with verified examples, document install/device guidance, actual version/platform coverage, numeric limitations, output shapes, and the small public API. Keep roadmap history and source-adaptation notices accurate.
-- [ ] **P7.02 — Validate a built distribution.** Acceptance: build wheel/sdist, install in a clean environment, run relevant tests/examples outside the source tree, and run lint checks. Record Windows CPU and CUDA evidence; add Linux CPU checks before claiming Linux support. GPU skips do not count as CUDA passes.
-- [ ] **P7.03 — Review repository hygiene and release scope.** Acceptance: no datasets, virtual environments, secrets, or generated checkpoints in tracked files; no undeclared PSANN dependency; reviewed license and dependency metadata; all deferred features remain out. Committing, pushing, and publishing are separate actions to request explicitly.
+- [x] **P7.01 — Finalize documentation.** README/API documentation now uses verified examples and covers local installation, device selection, actual Windows CPU/CUDA coverage, numeric limits, output shapes, the four-export public API, and deferred scope. Roadmap and PSANN source-adaptation notices remain accurate.
+- [x] **P7.02 — Validate a built distribution.** Built wheel/sdist were installed into a clean short-path Windows environment and tested outside the source tree: CPU artifact tests passed with CUDA-only tests skipped, lint passed, and all examples ran. The same wheel was installed into the CUDA environment and passed the complete GPU suite. Linux remains unclaimed.
+- [x] **P7.03 — Review repository hygiene and release scope.** Git ignore/status checks, archive inspection, credential-pattern scanning, dependency metadata inspection, and source search confirm ignored generated artifacts, no PSANN runtime dependency, MIT metadata, and the recorded deferred scope. Committing, pushing, and publishing remain separate actions to request explicitly.
 
 Exit: a small, validated initial release candidate with documented limitations.
 
@@ -234,4 +234,134 @@ git status --short
 
 Results: `110 passed, 1 deselected in 3.71s`; `All checks passed!`; `8 files already formatted`; import printed `<class 'exponet.nn.ExpoMLP'>`; and the example printed `prediction_shape=(1, 1)`. `git diff --check` exited 0 with only existing line-ending warnings for `README.md`, `docs/ROADMAP.md`, and `src/exponet/__init__.py`. Status showed the intentional P1.04 changes in `README.md`, `docs/ROADMAP.md`, `benchmarks/`, and `docs/ACTIVATION_BENCHMARK.md`, together with the P2 paths listed above.
 
-CUDA limitation: CUDA tests were deliberately deselected by the CPU command; no CUDA operation or validation is claimed because `torch.cuda.is_available()` is false on this machine. Current evidence covers CPU direct-module behavior only. P3.01 is the next roadmap task. No staging, commit, or push was performed.
+CUDA limitation at the time of this CPU-only entry: CUDA tests were deliberately deselected, and no CUDA operation or validation was claimed. Subsequent entries record the later CUDA setup and validation. No staging, commit, or push was performed.
+
+### 2026-08-30 — CUDA environment and activation smoke validation
+
+Installed Python 3.12.10 and an isolated `.venv-cuda` environment in the repository, then installed PyTorch 2.11.0+cu128, NumPy 2.5.2, scikit-learn 1.9.0, pytest 9.1.1, Ruff 0.16.5, and ExpoNet in editable mode. PyTorch reports CUDA runtime 12.8, one available device, and `NVIDIA GeForce RTX 5060`; `nvidia-smi` reports driver 616.56 and 8151 MiB of GPU memory. The CUDA toolkit compiler (`nvcc`) is not installed, which is not required for this prebuilt-PyTorch test path.
+
+Validation commands:
+
+```powershell
+.\.venv-cuda\Scripts\python.exe -B -m pytest -q -p no:cacheprovider tests/test_activations.py::TestExpoActivationDeviceAndDtype::test_cuda_float32
+.\.venv-cuda\Scripts\python.exe -B -m pytest -q -p no:cacheprovider
+.\.venv-cuda\Scripts\python.exe -B -m ruff check --no-cache --no-respect-gitignore src tests
+.\.venv-cuda\Scripts\python.exe -B -m ruff format --check --no-cache --no-respect-gitignore src tests
+.\.venv-cuda\Scripts\python.exe -B -m benchmarks.benchmark_activation --device cuda --num-threads 1 --warmup 1 --min-run-time 0.001 --output "$env:TEMP\exponet-activation-benchmark-cuda-20260830-smoke.json"
+```
+
+Results: the CUDA activation forward/backward/update test passed (`1 passed in 8.04s`); the full suite passed (`111 passed in 4.03s`); Ruff reported no lint errors and five formatted files; the CUDA benchmark smoke wrote 100 measurements. The benchmark smoke only proves GPU execution and synchronization paths, not performance: it uses one warmup and a 0.001-second minimum run time rather than the documented timing protocol.
+
+At the time of this entry, P3/P4 estimators, training, CPU/GPU state parity, and CUDA persistence were unavailable. The historical CPU-only execution entries above remain accurate descriptions of their recorded environments. No staging, commit, or push was performed.
+
+### 2026-08-30 — P3 shared training and regression
+
+Changed paths: `src/exponet/_validation.py`, `src/exponet/_training.py`, `src/exponet/estimators.py`, `src/exponet/__init__.py`, `tests/test_estimators.py`, and the P3 documentation.
+
+Implemented `ExpoRegressor` as a scikit-learn `BaseEstimator`/`RegressorMixin` wrapper around `ExpoMLP`. Dense finite numeric arrays are validated and converted to float32; sparse, complex, nonfinite, tensor, malformed, and empty inputs fail before model allocation. CPU arrays remain resident on CPU, with only mini-batches moved to the resolved device. Optional feature/target scalers fit only on training rows after splitting. The shared loop uses AdamW with non-overlapping linear-weight, blend, and no-decay parameter groups; sample-weighted epoch loss; optional clipping; finite-state checks; validation history; and early-stopping best-state restoration.
+
+Validation commands:
+
+```powershell
+.\.venv-cuda\Scripts\python.exe -B -m ruff format --check --no-cache --no-respect-gitignore src tests
+.\.venv-cuda\Scripts\python.exe -B -m ruff check --no-cache --no-respect-gitignore src tests
+.\.venv-cuda\Scripts\python.exe -B -m pytest -q -p no:cacheprovider
+```
+
+Results: `132 passed in 6.83s`; Ruff reported no lint errors and nine formatted files. P3 tests cover rank preservation, target inverse scaling, validation-scaler isolation, fixed and learned blends, optimizer grouping, early stopping, repeated/failed-fit lifecycle, cloning, Pipeline, GridSearchCV, real CUDA regression fit/predict, CUDA blend updates, and CPU/GPU inference parity from identical model state. No staging, commit, or push was performed.
+
+### 2026-08-30 — P4 classification and estimator integration
+
+Changed paths: `src/exponet/_training.py`, `src/exponet/_validation.py`, `src/exponet/estimators.py`, `src/exponet/__init__.py`, `tests/test_classifier.py`, `examples/regression.py`, `examples/classification.py`, and the P4 documentation.
+
+Implemented `ExpoClassifier` with the shared bounded-batch trainer used by regression. It validates homogeneous one-dimensional integer or string labels, sorts and preserves `classes_`, trains `K` logits with cross-entropy for both binary and multiclass tasks, returns ordered softmax probabilities, and maps argmax predictions back to original labels. Explicit validation rejects labels outside the fitted class set; internal early stopping uses a seeded stratified split. The classifier owns fresh model/scaler/history state per fit and supports cloning, Pipeline, and cross-validation.
+
+Validation commands:
+
+```powershell
+.\.venv-cuda\Scripts\python.exe -B -m ruff format --check --no-cache --no-respect-gitignore src tests examples
+.\.venv-cuda\Scripts\python.exe -B -m ruff check --no-cache --no-respect-gitignore src tests examples
+.\.venv-cuda\Scripts\python.exe -B -m pytest -q -p no:cacheprovider
+.\.venv-cuda\Scripts\python.exe -B examples\regression.py
+.\.venv-cuda\Scripts\python.exe -B examples\classification.py
+```
+
+Results: `146 passed in 9.00s`; Ruff reported no lint errors and thirteen formatted files. Both examples ran on CUDA with synthetic data (`r2=0.998` for fixed-blend regression and `accuracy=1.000` for multiclass classification). The CUDA classifier test verifies finite probabilities and blend movement. `sklearn.utils.estimator_checks.check_estimator` was also exercised with a small CPU configuration; it reaches the intentionally unsupported continuous-label case because ExpoClassifier accepts only integer/string labels, so full official-estimator-check compliance is not claimed. No staging, commit, or push was performed.
+
+### 2026-08-30 — P5 restricted inference persistence
+
+Changed paths: `src/exponet/_persistence.py`, `src/exponet/estimators.py`, `tests/test_persistence.py`, and the P5 documentation.
+
+Implemented version-1 inference snapshots for both estimators. Snapshots contain primitive constructor/fitted metadata and CPU tensor copies of the strict `ExpoMLP` state, along with scaler arrays, regression output-rank metadata, or classifier labels. Saving does not move the live model; it writes a temporary sibling and atomically replaces the destination. Loading uses `torch.load(..., weights_only=True, map_location="cpu")`, validates the kind/version/metadata, reconstructs only `ExpoMLP`, strictly loads state, and then honors the requested load device.
+
+Validation commands:
+
+```powershell
+.\.venv-cuda\Scripts\python.exe -B -m ruff format --check --no-cache --no-respect-gitignore src tests
+.\.venv-cuda\Scripts\python.exe -B -m ruff check --no-cache --no-respect-gitignore src tests
+.\.venv-cuda\Scripts\python.exe -B -m pytest -q -p no:cacheprovider tests/test_persistence.py
+.\.venv-cuda\Scripts\python.exe -B -m pytest -q -p no:cacheprovider
+```
+
+Results: persistence coverage passed (`10 passed in 6.25s`); the full suite passed (`156 passed in 10.23s`); Ruff reported no lint errors and twelve formatted files. Tests cover trained/fixed blends, both normalizations, one/multi-output target ranks, enabled/disabled scalers, classifier string labels, incompatible kind/version, damaged snapshots, wrong tensor shapes, failed-write preservation, fresh fit after load, and a CUDA-trained regression snapshot loaded on CPU without moving the live CUDA model. CPU/GPU output differences are compared with float32 tolerances rather than bitwise equality. No staging, commit, or push was performed.
+
+### 2026-08-30 — P6 initial controlled evaluation
+
+Changed paths: `benchmarks/initial_evaluation.py`, `docs/INITIAL_EVALUATION.md`, `README.md`, `docs/DECISIONS.md`, `docs/VALIDATION.md`, and `docs/ROADMAP.md`. Raw output: ignored `reports/initial-evaluation-20260830.json`.
+
+Implemented a reproducible runner that evaluates native ReLU/squared-ReLU, fixed Expo blends at 0/0.5/1, and learned per-layer/per-neuron blends. It uses paired 64/16/20 train/validation/test splits, five fixed seeds, both LayerNorm modes, matched `(16,)` blocks and optimizer budgets, train-only feature scaling, and train-only regression target scaling. It records per-seed metrics, parameters, runtime, coefficients, environment, dataset provenance/checksums, and failures.
+
+Execution command:
+
+```powershell
+.\.venv-cuda\Scripts\python.exe -B -m benchmarks.initial_evaluation --device cpu --epochs 35 --seeds 11,23,37,53,71 --output reports\initial-evaluation-20260830.json
+```
+
+Results: `280` of `280` runs completed. The reviewed [initial evaluation report](INITIAL_EVALUATION.md) contains the full aggregate metrics, paired learned-vs-ReLU differences, coefficient behavior, data provenance, limitations, and decision. On this small matrix learned blends did not consistently improve held-out results over ReLU; no default change is justified. No staging, commit, or push was performed.
+
+### 2026-08-30 — P7 first release readiness
+
+Changed paths: `README.md`, `docs/API_CONTRACT.md`, `docs/DESIGN.md`, `docs/DECISIONS.md`, `docs/VALIDATION.md`, `docs/ROADMAP.md`, and `tests/test_estimators.py`.
+
+The README is now a release guide rather than a planning notice: it contains a
+verified regression quick start, local install/device guidance, the small public
+API, prediction shapes, actual Windows coverage, numeric/persistence limits, and
+explicitly deferred features. API and design documents now identify the P1-P6
+surface as implemented. The device-index test accepts both valid explicit-CUDA
+rejection paths: CUDA unavailable on a CPU-only build, or an out-of-range CUDA
+device when CUDA is available.
+
+Built artifacts: `dist/exponet-0.1.0-py3-none-any.whl` and
+`dist/exponet-0.1.0.tar.gz` (both ignored). The wheel contains 12 members; the
+sdist contains 27 members. Metadata reports `Name: exponet`, `Version: 0.1.0`,
+`License-Expression: MIT`, and runtime requirements only for Torch, NumPy, and
+scikit-learn. Neither archive contains datasets, reports/runs, checkpoints, or
+virtual environments, and neither declares a PSANN dependency.
+
+Validation commands:
+
+```powershell
+.\.venv-cuda\Scripts\python.exe -B -m ruff format --check --no-cache --no-respect-gitignore src tests benchmarks examples
+.\.venv-cuda\Scripts\python.exe -B -m ruff check --no-cache --no-respect-gitignore src tests benchmarks examples
+.\.venv-cuda\Scripts\python.exe -B -m pytest -q -p no:cacheprovider
+.\.venv-cuda\Scripts\python.exe -B -m build
+```
+
+Source validation passed with `156 passed in 16.67s`. A clean Python 3.12
+environment at `C:\e7v\v` installed the built wheel with its declared
+dependencies (Torch 2.13.0 CPU build, NumPy 2.5.2, and scikit-learn 1.9.0).
+From the extracted sdist and outside the original source tree, its test suite
+passed `152 passed, 4 skipped`; all four skips were CUDA-only tests, lint passed,
+and direct-PyTorch/regression/classification examples completed on CPU. A longer
+temporary path initially exposed Windows' Torch path-length limit; the clean
+validation was repeated successfully from the short path above.
+
+The same built wheel was then installed non-editably into the CUDA environment.
+It imported from `site-packages` rather than `src`, saw `NVIDIA GeForce RTX 5060`
+with CUDA runtime 12.8, passed `156 passed in 16.08s`, and all three examples
+completed; regression and classification resolved to CUDA. Git status confirms
+that `.venv-cuda/`, `dist/`, `reports/`, and generated egg metadata are ignored.
+A credential-pattern scan and source/metadata scan found no credential-like
+assignments or PSANN runtime import/dependency. Linux CPU validation has not
+been run and no Linux support claim is made. No staging, commit, push, or
+publication was performed.

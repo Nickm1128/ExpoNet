@@ -1,6 +1,7 @@
 # Mathematical and architectural design
 
-Status: blend equation and per-neuron coefficients accepted; mapping, defaults, and remaining scope are proposed. Approval is tracked in [DECISIONS.md](DECISIONS.md).
+Status: the P1-P6 design is implemented. Accepted defaults and any later
+changes are tracked in [DECISIONS.md](DECISIONS.md).
 
 ## 1. Objective and boundaries
 
@@ -44,7 +45,8 @@ Example values:
 
 ### Constrained learning
 
-Propose an unconstrained PyTorch parameter `theta` for each learned coefficient:
+ExpoNet uses an unconstrained PyTorch parameter `theta` for each learned
+coefficient:
 
 ```text
 a = sigmoid(theta)
@@ -53,17 +55,38 @@ da/dtheta = a * (1 - a)
 df/dtheta = (u * u - u) * a * (1 - a)
 ```
 
-Under this proposed mapping, trainable initialization must satisfy `0 < blend_init < 1`; reject endpoints instead of silently shifting them. The default proposal is `blend_init=0.5`, giving `theta_init=0`. Finite precision can round extreme sigmoid results to endpoints; promise bounded values in `[0, 1]`, not strict floating-point interior membership. Large raw magnitudes can saturate gradients; record this in diagnostics.
+Under this mapping, trainable initialization must satisfy `0 < blend_init < 1`;
+endpoints are rejected rather than silently shifted. The default is
+`blend_init=0.5`, giving `theta_init=0`. Finite precision can round extreme
+sigmoid results to endpoints; the contract promises bounded values in `[0, 1]`,
+not strict floating-point interior membership. Large raw magnitudes can
+saturate gradients; diagnostics record the effective coefficients.
 
 For fixed blends, store `a` as a registered buffer and permit `[0, 1]` inclusively. This makes exact endpoint comparisons possible without infinite raw parameters. Fixed mode has no trainable coefficient parameter.
 
-Confirmed primary behavior is per neuron, with a vector matching the hidden width. The proposed per-layer experimental control uses one scalar per activation module. Create a new activation instance in each hidden layer; reusing one instance would unintentionally tie parameters. Do not use a separate coefficient per example or batch position.
+Confirmed primary behavior is per neuron, with a vector matching the hidden
+width. The per-layer experimental control uses one scalar per activation
+module. Each hidden layer has a new activation instance; reusing one would
+unintentionally tie parameters. ExpoNet does not use a separate coefficient per
+example or batch position.
 
 ### Computational cost
 
-The proposed sigmoid constraint and the activation operate at different scales. For hidden width `H` and batch size `B`, compute sigmoid on the `H` raw parameters before broadcasting; apply the rectifier and polynomial arithmetic to `B * H` values. For example, `H=256` and `B=128` means 256 sigmoid evaluations and 32,768 polynomial evaluations per layer forward. This is an element-count comparison, not a measured runtime ratio. Small GPU kernel launches and temporary tensors can still matter.
+The sigmoid constraint and the activation operate at different scales. For
+hidden width `H` and batch size `B`, ExpoNet computes sigmoid on the `H` raw
+parameters before broadcasting and applies the rectifier and polynomial
+arithmetic to `B * H` values. For example, `H=256` and `B=128` means 256
+sigmoid evaluations and 32,768 polynomial evaluations per layer forward. This
+is an element-count comparison, not a measured runtime ratio. Small GPU kernel
+launches and temporary tensors can still matter.
 
-The activation-value path and its input/coefficient derivatives require no general power, logarithm, exponential, or sine. The proposed sigmoid mapping still uses an exponential on the small parameter vector; this is not a promise to remove transcendental operations from the entire model. See the [PyTorch sigmoid kernel](https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/cuda/UnarySpecialOpsKernel.cu). Frozen inference could precompute effective coefficients, but no inference cache is part of the current contract.
+The activation-value path and its input/coefficient derivatives require no
+general power, logarithm, exponential, or sine. The sigmoid mapping still uses
+an exponential on the small parameter vector; this is not a promise to remove
+transcendental operations from the entire model. See the [PyTorch sigmoid
+kernel](https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/cuda/UnarySpecialOpsKernel.cu).
+Frozen inference could precompute effective coefficients, but no inference cache
+is part of the current contract.
 
 Dense matrix multiplication performs different amounts of work and uses different kernels. Neither operation counts alone nor scalar-operation latency determines whole-model speed. Profile activation forward/backward, complete blocks including normalization, and end-to-end training before making speed claims against ReLU or sine.
 
@@ -78,7 +101,11 @@ output = u * ((1 - a) + a * u)
 
 The factored and expanded forms are algebraically equivalent; floating-point order can change rounding. For finite inputs, fixed `a=0` reduces to ReLU without computing `u*u`, and fixed `a=1` reduces to squared ReLU. Use explicit multiplication, not a general `torch.pow` call. No positive-input floor, additive epsilon, clipping, absolute value, leaky negative branch, or custom backward is needed. Test the ReLU origin convention explicitly.
 
-This is a design reference, not tested ExpoNet code. Validate forward values and gradients of input and raw coefficient before adoption. Ordinary floating-point underflow/overflow remains possible, including when a gradient is larger than a finite forward value. The estimator rejects nonfinite inputs and fails on nonfinite training state; the standalone module's contract is for finite inputs and does not hide invalid values through repair.
+This is a design reference for tested ExpoNet code. Ordinary floating-point
+underflow/overflow remains possible, including when a gradient is larger than a
+finite forward value. The estimator rejects nonfinite inputs and fails on
+nonfinite training state; the standalone module's contract is for finite inputs
+and does not hide invalid values through repair.
 
 ## 3. Scaling and hidden normalization
 
@@ -88,7 +115,7 @@ Keep these separate:
 2. **Hidden normalization:** optionally normalize each sample's hidden features after a linear layer and before the blend.
 3. **Target standardization:** optional for regression only; inverse-transform predictions. Default off.
 
-Proposed hidden block:
+Implemented hidden block:
 
 ```text
 Linear -> LayerNorm or Identity -> ExpoActivation
@@ -113,7 +140,7 @@ Do not place LayerNorm directly on raw features by default. Feature standardizat
 - Fail if the output, loss, gradient, or updated parameter becomes nonfinite. Do not silently replace values or skip unsuccessful batches.
 - Validate CPU/CUDA float32 before considering reduced precision. No custom autograd function or custom CUDA kernel is needed for the initial version.
 
-## 5. Proposed package boundaries
+## 5. Package boundaries
 
 ```text
 src/exponet/
